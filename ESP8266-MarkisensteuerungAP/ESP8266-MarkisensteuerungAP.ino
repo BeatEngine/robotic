@@ -92,7 +92,7 @@ static float getWindSpeedFromStation()
   w_client.println("Connection: close");
   w_client.println();
   unsigned short et = 0;
-  while(!w_client.available() && et < 9999)
+  while(!w_client.available() && et < 2000)
   {
     et++;
   }
@@ -148,20 +148,6 @@ void loop()
     {
       stopEverything();
       action = false;
-    }
-  }
-
-  if(w_connected && !isInside)
-  {
-    if(getWindSpeedFromStation() > 3.0)
-    {
-      stopEverything();
-      action = true;
-      delay(300);
-      digitalWrite(5, LOW);
-      digitalWrite(4, HIGH);
-      actionBegin = millis();
-      isInside = true;
     }
   }
   
@@ -225,5 +211,18 @@ void loop()
       webclient.stop();
     }
     
+    }
+    if(w_connected && !isInside)
+    {
+      if(getWindSpeedFromStation() > 3.0)
+      {
+        stopEverything();
+        action = true;
+        delay(10);
+        digitalWrite(5, LOW);
+        digitalWrite(4, HIGH);
+        actionBegin = millis();
+        isInside = true;
+      }
     }
 } 
