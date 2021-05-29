@@ -1,5 +1,5 @@
 #include <ESP8266WiFi.h>
-//#include <WiFiClient.h>
+#include <WiFiClient.h>
 
 //#include <ESP8266WiFiMulti.h> 
 //#include <ESP8266mDNS.h>
@@ -8,16 +8,28 @@
 //      WLAN access point
 #define ssid "Markisensteuerung"
 #define password "12345"
+#define AP_CHANNEL 1
+#define AP_MAX_CON 4
+#define AP_HIDDEN false
 
-IPAddress localhost;
+//      WLAN access to the weather-station
+#define w_ssid "Wetterstation"
+#define w_password "12345"
+String w_hostname = "wetter";
 
-String nashostname = "fritz.box";
+IPAddress w_host;
+
+bool w_connected = false;
+WiFiClient w_client;
 
 String endline = "\r\n";
 
 int seconds = 0;
 
 bool stopper = false;
+
+//Detects not any use-case
+bool isInside = true;
 
 //Fritzbox:
 
@@ -45,9 +57,10 @@ void setup() {
     //Serial.begin(9600);
     //Serial.println();
     //Serial.print("Configuring access point...\n");
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(ssid, password);
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP(ssid, password, AP_CHANNEL, AP_HIDDEN, AP_MAX_CON);
     wifi_station_set_hostname("markise");
+    WiFi.begin(w_ssid, w_password);
     //while (WiFi.status() != WL_CONNECTED) {
      //delay(100);
      //Serial.print(".");
@@ -57,14 +70,55 @@ void setup() {
     //Serial.println("IP address: ");
     //Serial.println(WiFi.localIP());
     
-    localhost = WiFi.localIP();
-
+    delay(1500);
+    w_host = WiFi.localIP();
     webserver.begin();
+    if(w_client.connect(w_host, 80))
+    {
+      w_connected = true;
+    }
 }
+
+
 
 long maxTimeAction = 27000;
 bool action = false;
 long actionBegin = 0;
+
+static float getWindSpeedFromStation()
+{
+  w_client.println("GET /windspeed HTTP/1.1");
+  w_client.println("Host: markise");
+  w_client.println("Connection: close");
+  w_client.println();
+  unsigned short et = 0;
+  while(!w_client.available() && et < 9999)
+  {
+    et++;
+  }
+  String num = "";
+  bool nan = false;
+  while(w_client.available())
+  {
+    char c = w_client.read();
+    if(c != ' ')
+    {
+      if(c != '.' && (c < '0' || c > '9'))
+      {
+        nan = true;
+      }
+      num += c;
+    }
+  }
+  if(nan)
+  {
+    return 0.0;
+  }
+  else
+  {
+    return num.toFloat();
+  }
+}
 
 static void getState(WiFiClient& wclient)
 {
@@ -94,6 +148,20 @@ void loop()
     {
       stopEverything();
       action = false;
+    }
+  }
+
+  if(w_connected && !isInside)
+  {
+    if(getWindSpeedFromStation() > 3.0)
+    {
+      stopEverything();
+      action = true;
+      delay(300);
+      digitalWrite(5, LOW);
+      digitalWrite(4, HIGH);
+      actionBegin = millis();
+      isInside = true;
     }
   }
   
@@ -130,6 +198,7 @@ void loop()
     {
       if(!action)
       {
+        isInside = false;
         action = true;
         digitalWrite(4, LOW);
         digitalWrite(5, HIGH);
