@@ -19,44 +19,25 @@
 //      WLAN access point
 #define ssid "Wetterstation"
 #define password "12345"
+#define AP_CHANNEL 1
+#define AP_MAX_CON 4
+#define AP_HIDDEN false
 
-unsigned long ticktimer;
-// 20 ticks/s <=> 1.75 m/s
-volatile unsigned short windTicks = 0;
-volatile byte lastINTpin = LOW;
-//Interrupt routine
-void __receiveWindSignalISR()
-{
-  windTicks++;
-}
-
-void fakeInterruptOnChange()
-{
-  const byte tmp = digitalRead(D5);
-  if(tmp != lastINTpin)
-  {
-    lastINTpin = tmp;
-    __receiveWindSignalISR();
-  }
-}
-
-float windSpeedMpS = 0.0;
+volatile float windSpeedMpS = 0.0;
 
 void updateWindInput()
 {
-  // Values in one Second
-  const unsigned int tdiff = (unsigned int)(millis()-ticktimer);
-  fakeInterruptOnChange();
-  if(tdiff > 998)
+  // D4 (2) to A0 12 == 1 m/s
+  int inputFromOtherESP = analogRead(A0);
+  if(inputFromOtherESP > 10)
   {
-    fakeInterruptOnChange();
-    const float tINs = (float)(tdiff)/1000.0;
-    fakeInterruptOnChange();
-    windSpeedMpS = 0.0875*(float)(windTicks)/tINs;
-    windTicks = 0;
-    ticktimer = millis();
-    fakeInterruptOnChange();
+    inputFromOtherESP -= 10;
   }
+  else
+  {
+    inputFromOtherESP = 0;
+  }
+  windSpeedMpS = inputFromOtherESP / 12.0f;
 }
 
 IPAddress localhost;
@@ -65,15 +46,11 @@ String endline = "\r\n";
 
 int seconds = 0;
 
-bool stopper = false;
-
-//Fritzbox:
-
 WiFiServer webserver(80);
 
 String generateResponseHead(int contentLength = 0)
 {
-  fakeInterruptOnChange();
+  
   return String("HTTP/1.1 200 OK\r\nContent-Language: de\r\nContent-Type: text/html; Content-Length: "+String(contentLength)+"; charset=utf-8\r\n\r\n");  
 }
 
@@ -81,113 +58,68 @@ String htmlSite = "<html> <head> <title> Wetterstation</title> <style> .backgrou
 
 void index(WiFiClient& wclient)
 {
-  fakeInterruptOnChange();
-  wclient.print(generateResponseHead(htmlSite.length()) + htmlSite);
-  fakeInterruptOnChange();
+  wclient.print(generateResponseHead(htmlSite.length()) + htmlSite); 
 }
 
-//const byte interruptPin = 14; // D5
-
 void setup() {
-    
     //Interrupt Pin D4 == 2
-    pinMode(D5, OUTPUT);
-    digitalWrite(D5, HIGH);
-    delay(10);
-    digitalWrite(D5, LOW);
-    delay(10);
-    pinMode(D5, INPUT);
-    //digitalWrite(D4, LOW);
-    //attachInterrupt(digitalPinToInterrupt(interruptPin), __receiveWindSignalISR, CHANGE);
-    Serial.begin(9600);
-    //Serial.println();
-    //Serial.print("Configuring access point...\n");
+    pinMode(A0, INPUT);
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(ssid, password);
+    WiFi.softAP(ssid, password, AP_CHANNEL, AP_HIDDEN, AP_MAX_CON);
     wifi_station_set_hostname("wetter");
-    //while (WiFi.status() != WL_CONNECTED) {
-     //delay(100);
-     //Serial.print(".");
-    //}
-    
-    //Serial.println("WiFi connected");
-    //Serial.println("IP address: ");
-    //Serial.println(WiFi.localIP());
-    
+    delay(1500);
     localhost = WiFi.localIP();
-
     webserver.begin();
-    ticktimer = millis();
-    fakeInterruptOnChange();
+    delay(10);
+    Serial.begin(9600);
 }
 
 static void getWindSpeed(WiFiClient& wclient)
 { 
-  fakeInterruptOnChange();
   wclient.println(windSpeedMpS);
-  fakeInterruptOnChange();
   wclient.flush();
-  fakeInterruptOnChange();
   wclient.stop();
-  fakeInterruptOnChange();
 }
 
 void loop()
 {
   //updates windSpeedMpS 
-  fakeInterruptOnChange();
-  updateWindInput();
-  fakeInterruptOnChange();
-  String requestHeader = "";
-  fakeInterruptOnChange();
   
+  updateWindInput();
+  
+  String requestHeader = "";
+  Serial.println("UB-fix");
   WiFiClient webclient = webserver.available();
-  fakeInterruptOnChange();
+  
   if(webclient)
   {
-    fakeInterruptOnChange();
-    //Serial.println("Handle client!");
+    
     int c = 0;
-    fakeInterruptOnChange();
-    while(!webclient.available())
-    {
-      fakeInterruptOnChange();
-      updateWindInput();
-    }
+    
+    while(!webclient.available());
     while (webclient.available()) {
-      fakeInterruptOnChange();
-      updateWindInput();
       if(c < 255)
       {
-        fakeInterruptOnChange();
         requestHeader += (char)(webclient.read());
-        fakeInterruptOnChange();
         c++;
-        fakeInterruptOnChange();
       }
       else
       {
-        fakeInterruptOnChange();
         webclient.read();
-        fakeInterruptOnChange();
       }
+      updateWindInput();
     }
     //Serial.println(requestHeader.substring(0, 15));
     if(requestHeader.startsWith("GET /windspeed"))
     {
-      fakeInterruptOnChange();
       getWindSpeed(webclient);
-      fakeInterruptOnChange();
     }
     else if(requestHeader.startsWith("GET /"))
     {
-      fakeInterruptOnChange();
       index(webclient);
       webclient.flush();
-      fakeInterruptOnChange();
       webclient.stop();
-      fakeInterruptOnChange();
     }
-      fakeInterruptOnChange();
-    }
+      
+  }
 } 

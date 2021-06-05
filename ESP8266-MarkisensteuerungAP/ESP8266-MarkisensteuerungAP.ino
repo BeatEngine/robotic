@@ -110,14 +110,16 @@ static float getWindSpeedFromStation()
       num += c;
     }
   }
-  if(nan)
+  float result = 0.0;
+  if(!nan)
   {
-    return 0.0;
+    result = num.toFloat();
+    if(result > 35) //Filter currently Error in Wetherstation
+    {
+      result = 0.0;
+    }
   }
-  else
-  {
-    return num.toFloat();
-  }
+  return result;
 }
 
 static void getState(WiFiClient& wclient)
@@ -137,6 +139,8 @@ void stopEverything()
   digitalWrite(5, LOW);
   digitalWrite(4, LOW);
 }
+
+byte lazyChecker = 0;
 
 void loop()
 {
@@ -214,15 +218,22 @@ void loop()
     }
     if(w_connected && !isInside)
     {
-      if(getWindSpeedFromStation() > 3.0)
+      //const float wisp = getWindSpeedFromStation();
+      //Serial.println(wisp);
+      if(lazyChecker > 2)
       {
-        stopEverything();
-        action = true;
-        delay(10);
-        digitalWrite(5, LOW);
-        digitalWrite(4, HIGH);
-        actionBegin = millis();
-        isInside = true;
+        if(getWindSpeedFromStation() > 3.0)
+        {
+          stopEverything();
+          action = true;
+          delay(10);
+          digitalWrite(5, LOW);
+          digitalWrite(4, HIGH);
+          actionBegin = millis();
+          isInside = true;
+        }
+        lazyChecker = 0;
       }
+      lazyChecker++;
     }
 } 
